@@ -1,4 +1,4 @@
-module github.com/decentralized-identity/go-ipfs-ds-azure
+module github.com/cuh/go-ipfs-ds-azure
 
 go 1.14
 
