@@ -94,7 +94,7 @@ func (storage *AzureStorage) Get(ctx context.Context, k ds.Key) ([]byte, error) 
 		return nil, err
 	}
 
-	response, err := blobURL.Download(ctx, 0, 0, azblob.BlobAccessConditions{}, false, azblob.ClientProvidKeyOptions{})
+	response, err := blobURL.Download(ctx, 0, 0, azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
 
 	if err != nil {
 		if stgErr, ok := err.(azblob.StorageError); ok {
