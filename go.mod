@@ -1,6 +1,6 @@
 module github.com/cuh/go-ipfs-ds-azure
 
-go 1.9.12
+go 1.19.12
 
 require (
 	github.com/Azure/azure-storage-blob-go v0.15.0
