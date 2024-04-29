@@ -3,7 +3,7 @@ package plugin
 import (
 	"fmt"
 
-	"github.com/decentralized-identity/go-ipfs-ds-azure/azureds"
+	"github.com/cuh/go-ipfs-ds-azure/azureds"
 	"github.com/ipfs/kubo/plugin"
 	"github.com/ipfs/kubo/repo"
 	"github.com/ipfs/kubo/repo/fsrepo"
