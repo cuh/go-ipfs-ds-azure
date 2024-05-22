@@ -80,6 +80,8 @@ func (storage *AzureStorage) GetBlockURL(key string) (*azblob.BlockBlobURL, erro
 
 // Put adds a key value pair to the storage
 func (storage *AzureStorage) Put(ctx context.Context, k ds.Key, value []byte) error {
+	fmt.Printf("azurestorage put:%s\n", k.String())
+	fmt.Printf("azurestorage put:%d\n", len(value))
 	blobURL, err := storage.GetBlockURL(k.String())
 	if err != nil {
 		return err
@@ -89,8 +91,9 @@ func (storage *AzureStorage) Put(ctx context.Context, k ds.Key, value []byte) er
 	// NOTE: Metadata key names are always converted to lowercase before being sent to the Storage Service.
 	// Therefore, you should always use lowercase letters; especially when querying a map for a metadata key.
 	creatingApp, _ := os.Executable()
+	fmt.Printf("azurestorage creatingApp:%s\n", creatingApp)
 	_, err = blobURL.Upload(ctx, bytes.NewReader(value), azblob.BlobHTTPHeaders{},
-		azblob.Metadata{"author": "ipfs", "app": creatingApp}, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{}, azblob.ImmutabilityPolicyOptions{})
+		azblob.Metadata{"author": "dqfs", "app": creatingApp}, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{}, azblob.ImmutabilityPolicyOptions{})
 	if err != nil {
 		return err
 	}
@@ -166,6 +169,8 @@ func (storage *AzureStorage) GetSize(ctx context.Context, k ds.Key) (size int, e
 
 // Delete deletes the specified key
 func (storage *AzureStorage) Delete(ctx context.Context, k ds.Key) error {
+	fmt.Printf("\n\nDelete\n")
+	fmt.Printf("Delete %s\n", k.String())
 	blobURL, err := storage.GetBlockURL(k.String())
 	if err != nil {
 		return err
@@ -173,8 +178,10 @@ func (storage *AzureStorage) Delete(ctx context.Context, k ds.Key) error {
 
 	_, err = blobURL.Delete(ctx, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 	if err != nil {
+		fmt.Printf("blob delete err:%+v\n", err)
 		if stgErr, ok := err.(azblob.StorageError); ok &&
 			stgErr.ServiceCode() == azblob.ServiceCodeBlobNotFound {
+			fmt.Printf("blob delete err blob not found\n")
 			return ds.ErrNotFound
 		}
 		return err
@@ -184,7 +191,7 @@ func (storage *AzureStorage) Delete(ctx context.Context, k ds.Key) error {
 
 // Query returns a dsq result
 func (storage *AzureStorage) Query(ctx context.Context, q dsq.Query) (dsq.Results, error) {
-	//return nil, fmt.Errorf("Azure storage query not supported")
+
 	fmt.Printf("Azure Query\nq.String=%v\n", q.String())
 	fmt.Printf("q.offset=%v\n", q.Offset)
 	fmt.Printf("q.prefix=%v\n", q.Prefix)
@@ -203,7 +210,6 @@ func (storage *AzureStorage) Query(ctx context.Context, q dsq.Query) (dsq.Result
 		fmt.Println("Invalid credentials provided")
 		return nil, fmt.Errorf("Azure: Invalid credentials provided")
 	}
-	fmt.Printf("1, q.Prefix = %v\n", q.Prefix)
 
 	limit := q.Limit + q.Offset
 	if limit == 0 || limit > 1000 {
@@ -212,24 +218,22 @@ func (storage *AzureStorage) Query(ctx context.Context, q dsq.Query) (dsq.Result
 
 	pipeline := azblob.NewPipeline(credential, azblob.PipelineOptions{})
 
-	baseUrl, _ := url.Parse(fmt.Sprintf("https://%s.blob.core.windows.net", accountName))
+	baseUrl, _ := url.Parse(fmt.Sprintf("https://%s.blob.core.windows.net/", accountName))
 	serviceURL := azblob.NewServiceURL(*baseUrl, pipeline)
 
 	containerURL := serviceURL.NewContainerURL(containerName)
 
-	//directoryURL := containerURL.NewBlobURL(folderName)
-	//listBlob, err := containerURL.ListBlobsHierarchySegment(context.Background(), azblob.Marker{}, "/", azblob.ListBlobsSegmentOptions{})
-	//listBlob, err := containerURL.ListBlobsHierarchySegment(context.Background(), azblob.Marker{}, folderName+"/"+q.Prefix, azblob.ListBlobsSegmentOptions{})
-	//listBlob, err := directoryURL.ListBlobHierarchySegment(context.Background(), azblob.NewBlobHierarchyListSegmentOptions(), nil)
 	var string = ""
 	if folderName == "" {
 		string = q.Prefix
 	} else {
 		string = folderName + q.Prefix
 	}
+	string = strings.TrimPrefix(string, "/")
+	string = string + "/"
 	fmt.Printf("prefix string=%s\n", string)
-	listBlob, err := containerURL.ListBlobsHierarchySegment(context.Background(), azblob.Marker{}, string, azblob.ListBlobsSegmentOptions{})
 
+	listBlob, err := containerURL.ListBlobsHierarchySegment(context.Background(), azblob.Marker{}, "/", azblob.ListBlobsSegmentOptions{Prefix: string})
 	if err != nil {
 		fmt.Printf("Error listing blobs in directory: %v\n", err)
 		return nil, fmt.Errorf("Azure: Error listing blobs in directory")
@@ -237,27 +241,41 @@ func (storage *AzureStorage) Query(ctx context.Context, q dsq.Query) (dsq.Result
 
 	entry := dsq.Entry{}
 	fmt.Printf("Azure listblob\n")
+	index := q.Offset
+	fmt.Printf("len(listBlob.Segment.BlobItems):%d\n", len(listBlob.Segment.BlobItems))
+	length := len(listBlob.Segment.BlobItems)
 	nextValue := func() (dsq.Result, bool) {
-		for _, blob := range listBlob.Segment.BlobItems {
-			var string = "listbolb:" + ds.NewKey(blob.Name).String() + "\n"
-			fmt.Println(string)
-			//if blob.Name[0] != '/' {
-			//	blob.Name = "/" + blob.Name
-			//}
-			if strings.HasPrefix(ds.NewKey(blob.Name).String(), q.Prefix) {
-				var string = "key:" + ds.NewKey(blob.Name).String() + "\n"
-				fmt.Println(string)
-				entry = dsq.Entry{
-					Key: ds.NewKey(blob.Name).String(),
-					//Key:   q.Prefix + "/" + "123",
-					Size:  int(*blob.Properties.ContentLength),
-					Value: nil,
-				}
-			}
+		fmt.Printf("nextValue enter, length=%d\n", length)
 
+		if len(listBlob.Segment.BlobItems) == 0 {
+			return dsq.Result{}, false
 		}
-		fmt.Printf("dsq entry ok\n")
-		return dsq.Result{Entry: entry}, true
+		if length <= 0 {
+			return dsq.Result{}, false
+		}
+
+		//for _, blob := range listBlob.Segment.BlobItems {
+		blobName := listBlob.Segment.BlobItems[index].Name
+		blobSize := listBlob.Segment.BlobItems[index].Properties.ContentLength
+		fmt.Printf("length = %d\n", length)
+		length = length - 1
+		var string = "listbolb:" + ds.NewKey(blobName).String() + "\n"
+		fmt.Println(string)
+
+		if strings.HasPrefix(ds.NewKey(blobName).String(), q.Prefix) {
+			var string = "key:" + ds.NewKey(blobName).String() + "\n"
+			fmt.Println(string)
+			fmt.Printf("key size:%d\n", int(*blobSize))
+			entry = dsq.Entry{
+				Key:   ds.NewKey(blobName).String(),
+				Size:  int(*blobSize),
+				Value: nil,
+			}
+			fmt.Printf("dsq entry ok\n")
+			index++
+			return dsq.Result{Entry: entry}, true
+		}
+		return dsq.Result{}, false
 	}
 	fmt.Printf("dsq ResultsFromIterator enter\n")
 	return dsq.ResultsFromIterator(q, dsq.Iterator{
@@ -298,13 +316,11 @@ func (storage *AzureStorage) Batch(ctx context.Context) (ds.Batch, error) {
 }
 
 func (batch *azureBatch) Put(ctx context.Context, key ds.Key, val []byte) error {
-	fmt.Printf("azureBatch put %v\n", key.String())
 	batch.ops[key.String()] = batchOp{val: val, delete: false}
 	return nil
 }
 
 func (batch *azureBatch) Delete(ctx context.Context, key ds.Key) error {
-	fmt.Printf("azureBatch delete %v\n", key.String())
 	batch.ops[key.String()] = batchOp{val: nil, delete: true}
 	return nil
 }
